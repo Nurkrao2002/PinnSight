@@ -13,8 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Send, ChevronsUpDown } from "lucide-react";
-import { supportTickets } from "@/lib/mock-data";
-import type { SupportTicket } from "@/lib/mock-data";
+import { SupportTicket } from "@/lib/types";
 import { useSearchParams, useParams } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -59,35 +58,53 @@ export default function RaiseTicketPage() {
     },
   });
 
-  const [myTickets, setMyTickets] = React.useState<SupportTicket[]>(() => 
-    supportTickets.filter(t => t.user === userName || (t.user.includes('@') && userName.includes('@') && t.user.split('@')[1] === userName.split('@')[1]))
-  );
+  const [myTickets, setMyTickets] = React.useState<SupportTicket[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
 
-  const onSubmit = (values: RaiseTicketFormValues) => {
-    const user = searchParams.get('name') || "Unknown User";
+  React.useEffect(() => {
+    const fetchTickets = async () => {
+      try {
+        const response = await fetch('/api/support-tickets');
+        const tickets = await response.json();
+        const userEmail = searchParams.get('email');
+        setMyTickets(tickets.filter((t: SupportTicket) => t.user_email === userEmail));
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Could not fetch your tickets.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchTickets();
+  }, [searchParams, toast]);
+
+  const onSubmit = async (values: RaiseTicketFormValues) => {
+    const user = searchParams.get('email') || "Unknown User";
     const tenant = params.company as string || "Unknown Tenant";
     
-    // In a real app, this would be an API call.
-    // Here, we just add it to our mock data array.
-    const newTicket = {
-      id: `T-${Math.floor(Math.random() * 9000) + 1000}`,
-      subject: values.subject,
-      tenant: tenant.charAt(0).toUpperCase() + tenant.slice(1),
-      user: user,
-      priority: values.priority,
-      status: "Open" as const,
-      created: new Date(),
-      lastUpdated: new Date(),
-    };
-    
-    supportTickets.unshift(newTicket);
-    setMyTickets(prev => [newTicket, ...prev]);
-    
-    toast({
-      title: "Ticket Submitted Successfully!",
-      description: `Your support ticket #${newTicket.id} has been received.`,
-    });
-    form.reset();
+    try {
+      const response = await fetch('/api/support-tickets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...values, user, tenant }),
+      });
+      const newTicket = await response.json();
+      setMyTickets(prev => [newTicket, ...prev]);
+      toast({
+        title: "Ticket Submitted Successfully!",
+        description: `Your support ticket #${newTicket.id} has been received.`,
+      });
+      form.reset();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to submit your ticket. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -197,13 +214,17 @@ export default function RaiseTicketPage() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {myTickets.length > 0 ? myTickets.map(ticket => (
+                                {isLoading ? (
+                                    <TableRow>
+                                        <TableCell colSpan={5} className="text-center h-24">Loading tickets...</TableCell>
+                                    </TableRow>
+                                ) : myTickets.length > 0 ? myTickets.map(ticket => (
                                     <TableRow key={ticket.id}>
                                         <TableCell className="font-mono">{ticket.id}</TableCell>
                                         <TableCell className="font-medium">{ticket.subject}</TableCell>
                                         <TableCell><Badge variant={priorityVariantMap[ticket.priority]}>{ticket.priority}</Badge></TableCell>
                                         <TableCell><Badge variant={statusVariantMap[ticket.status]}>{ticket.status}</Badge></TableCell>
-                                        <TableCell>{format(ticket.lastUpdated, "PPP")}</TableCell>
+                                        <TableCell>{format(new Date(ticket.last_updated_at), "PPP")}</TableCell>
                                     </TableRow>
                                 )) : (
                                     <TableRow>

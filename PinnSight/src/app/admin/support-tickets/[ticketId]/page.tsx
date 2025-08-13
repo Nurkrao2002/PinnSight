@@ -1,10 +1,11 @@
 
 "use client";
 
+import { useState, useEffect } from "react";
 import { notFound, useParams } from "next/navigation";
-import { supportTickets } from "@/lib/mock-data";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { SupportTicket } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, MessageSquare, Tag, User, Users, Calendar, Clock } from "lucide-react";
@@ -61,10 +62,42 @@ const statusVariantMap: Record<any, "secondary" | "default" | "destructive"> = {
 export default function TicketDetailsPage() {
     const params = useParams();
     const ticketId = params.ticketId as string;
-    const ticket = supportTickets.find(t => t.id === ticketId);
+    const [ticket, setTicket] = useState<SupportTicket | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchTicket = async () => {
+            try {
+                const response = await fetch(`/api/support-tickets/${ticketId}`);
+                if (!response.ok) {
+                    notFound();
+                    return;
+                }
+                const data = await response.json();
+                setTicket({
+                    ...data,
+                    created: new Date(data.created_at),
+                    lastUpdated: new Date(data.last_updated_at),
+                });
+            } catch (error) {
+                console.error("Failed to fetch ticket", error);
+                notFound();
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        if (ticketId) {
+            fetchTicket();
+        }
+    }, [ticketId]);
+
+    if (isLoading) {
+        return <div>Loading...</div>;
+    }
 
     if (!ticket) {
-        notFound();
+        return notFound();
     }
 
     return (
