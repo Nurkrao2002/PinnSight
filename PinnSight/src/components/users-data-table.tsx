@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -28,14 +28,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { FormSheet } from "./form-sheet";
-
-type User = {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  avatar: string;
-};
+import { User } from "@/lib/types";
 
 const userSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
@@ -43,11 +36,33 @@ const userSchema = z.object({
   role: z.string(),
 });
 
-export function UsersDataTable({ initialUsers, showHeader = true }: { initialUsers: User[], showHeader?: boolean }) {
+export function UsersDataTable({ initialUsers, showHeader = true }: { initialUsers?: User[], showHeader?: boolean }) {
   const { toast } = useToast();
-  const [users, setUsers] = useState(initialUsers);
+  const [users, setUsers] = useState(initialUsers || []);
+  const [isLoading, setIsLoading] = useState(!initialUsers);
   const [isSheetOpen, setSheetOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    if (!initialUsers) {
+      const fetchUsers = async () => {
+        try {
+          const response = await fetch('/api/users');
+          const data = await response.json();
+          setUsers(data);
+        } catch (error) {
+          toast({
+            title: "Error",
+            description: "Could not fetch users.",
+            variant: "destructive",
+          });
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      fetchUsers();
+    }
+  }, [initialUsers, toast]);
 
   const form = useForm<z.infer<typeof userSchema>>({
     resolver: zodResolver(userSchema),
@@ -66,19 +81,51 @@ export function UsersDataTable({ initialUsers, showHeader = true }: { initialUse
     setSheetOpen(true);
   };
 
-  const onSubmit = (values: z.infer<typeof userSchema>) => {
-    // Simulate API call
-    setTimeout(() => {
+  const onSubmit = async (values: z.infer<typeof userSchema>) => {
+    try {
       if (editingUser) {
-        setUsers(users.map((u) => (u.id === editingUser.id ? { ...u, ...values } : u)));
+        const response = await fetch(`/api/users/${editingUser.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(values),
+        });
+        const updatedUser = await response.json();
+        setUsers(users.map((u) => (u.id === editingUser.id ? updatedUser : u)));
         toast({ title: "User Updated", description: "The user details have been successfully updated." });
       } else {
-        const newUser = { ...values, id: `usr_${Date.now()}`, avatar: `https://i.pravatar.cc/150?u=${Date.now()}`};
+        const response = await fetch('/api/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(values),
+        });
+        const newUser = await response.json();
         setUsers([newUser, ...users]);
         toast({ title: "User Added", description: "A new user has been successfully added." });
       }
       setSheetOpen(false);
-    }, 500);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "An error occurred while saving the user.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDelete = async (userId: string) => {
+    try {
+      await fetch(`/api/users/${userId}`, {
+        method: 'DELETE',
+      });
+      setUsers(users.filter((u) => u.id !== userId));
+      toast({ title: "User Deleted", description: "The user has been successfully deleted." });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "An error occurred while deleting the user.",
+        variant: "destructive",
+      });
+    }
   };
   
   const cardHeader = showHeader ? (
@@ -136,7 +183,7 @@ export function UsersDataTable({ initialUsers, showHeader = true }: { initialUse
                     <DropdownMenuContent align="end">
                       <DropdownMenuLabel>Actions</DropdownMenuLabel>
                       <DropdownMenuItem onClick={() => handleEdit(user)}>Edit</DropdownMenuItem>
-                      <DropdownMenuItem className="text-destructive">Delete</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleDelete(user.id)} className="text-destructive">Delete</DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </TableCell>

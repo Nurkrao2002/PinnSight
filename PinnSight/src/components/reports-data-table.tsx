@@ -2,7 +2,7 @@
 "use client";
 
 import * as React from "react";
-import { Download, FileText, MoreHorizontal } from "lucide-react";
+import { Download, FileText, MoreHorizontal, Users, Lightbulb, Activity } from "lucide-react";
 import { addDays, format } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import {
@@ -27,7 +27,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { type Report, availableReports as allReports } from "@/lib/mock-data";
+import { Report } from "@/lib/types";
 
 
 type ReportType = "financial" | "membership" | "sales" | "operations" | "all";
@@ -37,14 +37,49 @@ interface ReportsDataTableProps {
   filterValue?: string;
 }
 
+const iconMap = {
+  financial: FileText,
+  membership: Users,
+  sales: Lightbulb,
+  operations: Activity,
+};
+
 export function ReportsDataTable({ reportType = "all", filterValue = "" }: ReportsDataTableProps) {
   const { toast } = useToast();
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
-  
-  const availableReports = reportType === 'all' 
-    ? allReports.financial.concat(allReports.membership, allReports.sales, allReports.operations)
-    : allReports[reportType];
+  const [data, setData] = React.useState<Report[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    const fetchReports = async () => {
+      try {
+        const response = await fetch('/api/reports');
+        let reports = await response.json();
+
+        reports = reports.map((report: any) => ({
+          ...report,
+          lastGenerated: new Date(report.last_generated_at),
+          icon: iconMap[report.category as keyof typeof iconMap] || FileText,
+        }));
+
+        if (reportType !== 'all') {
+          reports = reports.filter((report: Report) => report.category === reportType);
+        }
+
+        setData(reports);
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Could not fetch reports.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchReports();
+  }, [reportType, toast]);
 
 
   const handleExport = (reportTitle: string, format: "PDF" | "CSV" | "XLSX") => {
@@ -128,7 +163,7 @@ export function ReportsDataTable({ reportType = "all", filterValue = "" }: Repor
   ];
 
   const table = useReactTable({
-    data: availableReports,
+    data,
     columns,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
@@ -165,7 +200,13 @@ export function ReportsDataTable({ reportType = "all", filterValue = "" }: Repor
                 ))}
               </TableHeader>
               <TableBody>
-                {table.getRowModel().rows?.length ? (
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={columns.length} className="h-24 text-center">
+                      Loading...
+                    </TableCell>
+                  </TableRow>
+                ) : table.getRowModel().rows?.length ? (
                   table.getRowModel().rows.map((row) => (
                     <TableRow key={row.id} data-state={row.getIsSelected() && "selected"}>
                       {row.getVisibleCells().map((cell) => (
