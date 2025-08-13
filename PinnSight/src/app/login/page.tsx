@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Logo } from "@/components/icons";
 import { useToast } from "@/hooks/use-toast";
 import { Eye, EyeOff } from "lucide-react";
-import { userList } from "@/lib/mock-data";
+import { User } from "@/lib/types";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -18,13 +18,18 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("PinnSight@123");
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const user = userList.find(u => u.email === email);
+    setIsLoggingIn(true);
+    try {
+      const response = await fetch("/api/users");
+      const userList: User[] = await response.json();
+      const user = userList.find(u => u.email === email);
 
-    if (user) {
-      const companyDomain = user.email.split('@')[1];
+      if (user) {
+        const companyDomain = user.email.split('@')[1];
       const companySlug = companyDomain.split('.')[0];
       
       const searchParams = new URLSearchParams({
@@ -80,12 +85,21 @@ export default function LoginPage() {
       
       router.push(`${path}?${params}`);
 
-    } else {
-      toast({
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Login Failed",
+          description: "Invalid email or password.",
+        });
+      }
+    } catch (error) {
+       toast({
         variant: "destructive",
-        title: "Login Failed",
-        description: "Invalid email or password.",
+        title: "Login Error",
+        description: "An error occurred during login. Please try again.",
       });
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
@@ -137,8 +151,8 @@ export default function LoginPage() {
                 </button>
               </div>
             </div>
-            <Button type="submit" className="w-full">
-              Sign In
+            <Button type="submit" className="w-full" disabled={isLoggingIn}>
+              {isLoggingIn ? "Signing In..." : "Sign In"}
             </Button>
           </form>
         </CardContent>
