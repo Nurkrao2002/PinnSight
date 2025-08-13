@@ -42,7 +42,7 @@ import {
 import { Badge } from "./ui/badge";
 import { Card, CardContent } from "./ui/card";
 import { DashboardHeader } from "./dashboard-header";
-import { type SupportTicket, supportTickets as initialSupportTickets } from "@/lib/mock-data";
+import { SupportTicket } from "@/lib/types";
 import { format } from "date-fns";
 import {
   Select,
@@ -71,23 +71,65 @@ const statusVariantMap: Record<SupportTicket['status'], "secondary" | "default" 
 export function SupportTicketsDataTable() {
   const { toast } = useToast();
   const searchParams = useSearchParams();
-  const [data, setData] = React.useState(initialSupportTickets);
+  const [data, setData] = React.useState<SupportTicket[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
   const [rowSelection, setRowSelection] = React.useState({});
+
+  React.useEffect(() => {
+    const fetchTickets = async () => {
+      try {
+        const response = await fetch('/api/support-tickets');
+        const tickets = await response.json();
+        setData(tickets.map((ticket: SupportTicket) => ({
+          ...ticket,
+          created: new Date(ticket.created),
+          lastUpdated: new Date(ticket.lastUpdated),
+        })));
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Could not fetch support tickets.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchTickets();
+  }, [toast]);
 
   const createHref = (href: string) => {
     const newSearchParams = new URLSearchParams(searchParams.toString());
     return `${href}?${newSearchParams.toString()}`;
   }
 
-  const handleChangeStatus = (ticketId: string, newStatus: SupportTicket['status']) => {
-    setData(prevData => prevData.map(ticket => ticket.id === ticketId ? { ...ticket, status: newStatus, lastUpdated: new Date() } : ticket));
-    toast({
-        title: "Status Updated",
-        description: `Ticket ${ticketId} has been updated to "${newStatus}".`
-    });
+  const handleChangeStatus = async (ticketId: string, newStatus: SupportTicket['status']) => {
+    try {
+      const response = await fetch(`/api/support-tickets/${ticketId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      const updatedTicket = await response.json();
+      setData(prevData => prevData.map(ticket => ticket.id === ticketId ? {
+        ...updatedTicket,
+        created: new Date(updatedTicket.created),
+        lastUpdated: new Date(updatedTicket.lastUpdated),
+      } : ticket));
+      toast({
+          title: "Status Updated",
+          description: `Ticket ${ticketId} has been updated to "${newStatus}".`
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "An error occurred while updating the ticket status.",
+        variant: "destructive",
+      });
+    }
   }
 
   const columns: ColumnDef<SupportTicket>[] = [
@@ -301,32 +343,38 @@ export function SupportTicketsDataTable() {
                         ))}
                         </TableHeader>
                         <TableBody>
-                        {table.getRowModel().rows?.length ? (
-                            table.getRowModel().rows.map((row) => (
-                            <TableRow
-                                key={row.id}
-                                data-state={row.getIsSelected() && "selected"}
-                            >
-                                {row.getVisibleCells().map((cell) => (
-                                <TableCell key={cell.id}>
-                                    {flexRender(
-                                    cell.column.columnDef.cell,
-                                    cell.getContext()
-                                    )}
-                                </TableCell>
-                                ))}
-                            </TableRow>
-                            ))
-                        ) : (
+                          {isLoading ? (
                             <TableRow>
-                            <TableCell
-                                colSpan={columns.length}
-                                className="h-24 text-center"
-                            >
-                                No results.
-                            </TableCell>
+                              <TableCell colSpan={columns.length} className="h-24 text-center">
+                                Loading...
+                              </TableCell>
                             </TableRow>
-                        )}
+                          ) : table.getRowModel().rows?.length ? (
+                              table.getRowModel().rows.map((row) => (
+                              <TableRow
+                                  key={row.id}
+                                  data-state={row.getIsSelected() && "selected"}
+                              >
+                                  {row.getVisibleCells().map((cell) => (
+                                  <TableCell key={cell.id}>
+                                      {flexRender(
+                                      cell.column.columnDef.cell,
+                                      cell.getContext()
+                                      )}
+                                  </TableCell>
+                                  ))}
+                              </TableRow>
+                              ))
+                          ) : (
+                              <TableRow>
+                              <TableCell
+                                  colSpan={columns.length}
+                                  className="h-24 text-center"
+                              >
+                                  No results.
+                              </TableCell>
+                              </TableRow>
+                          )}
                         </TableBody>
                     </Table>
                     </div>

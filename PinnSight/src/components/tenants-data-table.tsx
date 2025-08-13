@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -31,7 +31,7 @@ import { useToast } from "@/hooks/use-toast";
 import { DashboardHeader } from "./dashboard-header";
 import { Card, CardContent } from "./ui/card";
 import { Badge } from "./ui/badge";
-import { type Tenant, tenants as initialTenants } from "@/lib/mock-data";
+import { type Tenant } from "@/lib/types";
 import { FormSheet } from "./form-sheet";
 
 
@@ -44,9 +44,29 @@ const tenantSchema = z.object({
 export function TenantsDataTable() {
   const { toast } = useToast();
   const searchParams = useSearchParams();
-  const [tenants, setTenants] = useState(initialTenants);
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [isSheetOpen, setSheetOpen] = useState(false);
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
+
+  useEffect(() => {
+    const fetchTenants = async () => {
+      try {
+        const response = await fetch('/api/tenants');
+        const data = await response.json();
+        setTenants(data);
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Could not fetch tenants.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchTenants();
+  }, [toast]);
 
   const form = useForm<z.infer<typeof tenantSchema>>({
     resolver: zodResolver(tenantSchema),
@@ -71,25 +91,51 @@ export function TenantsDataTable() {
   }
 
 
-  const onSubmit = (values: z.infer<typeof tenantSchema>) => {
-    setTimeout(() => {
+  const onSubmit = async (values: z.infer<typeof tenantSchema>) => {
+    try {
       if (editingTenant) {
-        setTenants(tenants.map((t) => (t.id === editingTenant.id ? { ...t, ...values, plan: values.plan, status: t.status } : t)));
+        const response = await fetch(`/api/tenants/${editingTenant.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(values),
+        });
+        const updatedTenant = await response.json();
+        setTenants(tenants.map((t) => (t.id === editingTenant.id ? updatedTenant : t)));
         toast({ title: "Tenant Updated", description: "The tenant details have been successfully updated." });
       } else {
-        const newTenant: Tenant = { 
-            ...values,
-            plan: values.plan,
-            id: `ten_${Date.now()}`, 
-            users: 1, 
-            lastActive: 'Just now',
-            status: "Provisioning"
-        };
+        const response = await fetch('/api/tenants', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(values),
+        });
+        const newTenant = await response.json();
         setTenants([newTenant, ...tenants]);
         toast({ title: "Tenant Added", description: "A new tenant has been successfully added." });
       }
       setSheetOpen(false);
-    }, 500);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "An error occurred while saving the tenant.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDelete = async (tenantId: string) => {
+    try {
+      await fetch(`/api/tenants/${tenantId}`, {
+        method: 'DELETE',
+      });
+      setTenants(tenants.filter((t) => t.id !== tenantId));
+      toast({ title: "Tenant Deleted", description: "The tenant has been successfully deleted." });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "An error occurred while deleting the tenant.",
+        variant: "destructive",
+      });
+    }
   };
   
   const content = (
@@ -107,17 +153,24 @@ export function TenantsDataTable() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {tenants.map((tenant) => (
-              <TableRow key={tenant.id}>
-                <TableCell className="font-medium">{tenant.name}</TableCell>
-                <TableCell>
-                    <Badge variant={tenant.plan === 'Enterprise' ? 'default' : 'secondary'}>{tenant.plan}</Badge>
+            {isLoading ? (
+              <TableRow>
+                <TableCell colSpan={6} className="h-24 text-center">
+                  Loading...
                 </TableCell>
-                <TableCell>
-                    <Badge variant={tenant.status === 'Active' ? 'secondary' : 'destructive'}>{tenant.status}</Badge>
-                </TableCell>
-                <TableCell>{tenant.users}</TableCell>
-                <TableCell>{tenant.lastActive}</TableCell>
+              </TableRow>
+            ) : (
+              tenants.map((tenant) => (
+                <TableRow key={tenant.id}>
+                  <TableCell className="font-medium">{tenant.name}</TableCell>
+                  <TableCell>
+                      <Badge variant={tenant.plan === 'Enterprise' ? 'default' : 'secondary'}>{tenant.plan}</Badge>
+                  </TableCell>
+                  <TableCell>
+                      <Badge variant={tenant.status === 'Active' ? 'secondary' : 'destructive'}>{tenant.status}</Badge>
+                  </TableCell>
+                  <TableCell>{tenant.users}</TableCell>
+                  <TableCell>{tenant.last_active}</TableCell>
                 <TableCell className="text-right">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -132,7 +185,7 @@ export function TenantsDataTable() {
                        <DropdownMenuItem asChild>
                           <Link href={createHref(`/admin/tenants/${tenant.id}`)}>View Details</Link>
                         </DropdownMenuItem>
-                      <DropdownMenuItem className="text-destructive">Suspend</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleDelete(tenant.id)} className="text-destructive">Delete</DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </TableCell>
