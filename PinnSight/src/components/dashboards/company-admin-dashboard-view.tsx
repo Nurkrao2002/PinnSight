@@ -2,9 +2,9 @@
 
 "use client";
 
+import { useState, useEffect } from "react";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { UsersDataTable } from "../users-data-table";
-import { userList } from "@/lib/mock-data";
 import { CompanyAdminSettings } from "../company-admin-settings";
 import { StatCard } from "../stat-card";
 import { BadgeDollarSign, Users, PieChart as PieChartIcon, CalendarCheck2, UserPlus, Download } from "lucide-react";
@@ -29,10 +29,22 @@ const revenueHistory = [
     { month: 'Mar', revenue: 510000 }, { month: 'Apr', revenue: 500000 },
     { month: 'May', revenue: 520000 }, { month: 'Jun', revenue: 540000 },
 ];
-const recentUsers = userList.slice(0, 5).map(u => ({...u, lastLogin: format(new Date(), 'PPP')}));
-
-
 export function CompanyAdminDashboardView() {
+  const [recentUsers, setRecentUsers] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const response = await fetch('/api/users');
+        const users = await response.json();
+        setRecentUsers(users.slice(0, 5).map((u: any) => ({...u, lastLogin: format(new Date(), 'PPP')})));
+      } catch (error) {
+        console.error("Failed to fetch recent users", error);
+      }
+    };
+    fetchUsers();
+  }, []);
+
   return (
     <>
       <DashboardHeader 
@@ -127,7 +139,7 @@ export function CompanyAdminDashboardView() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2">
-                <UsersDataTable initialUsers={userList} />
+                <UsersDataTable />
             </div>
             <div className="space-y-6">
                  <Card>

@@ -2,10 +2,11 @@
 
 "use client";
 
+import { useState, useEffect } from "react";
 import { notFound, useParams } from "next/navigation";
-import { tenants, userList } from "@/lib/mock-data";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tenant, User } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Users, Clock, DollarSign, Activity, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -44,16 +45,48 @@ const activityLog = [
 export default function TenantDetailsPage() {
     const params = useParams();
     const tenantId = params.tenantId as string;
+    const [tenant, setTenant] = useState<Tenant | null>(null);
+    const [tenantUsers, setTenantUsers] = useState<User[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
 
-    const tenant = tenants.find(t => t.id === tenantId);
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                const [tenantResponse, usersResponse] = await Promise.all([
+                    fetch(`/api/tenants/${tenantId}`),
+                    fetch('/api/users')
+                ]);
+
+                if (!tenantResponse.ok) {
+                    notFound();
+                    return;
+                }
+
+                const tenantData = await tenantResponse.json();
+                const usersData = await usersResponse.json();
+
+                setTenant(tenantData);
+                setTenantUsers(usersData.filter((user: User) => user.tenant_id === tenantId));
+            } catch (error) {
+                console.error("Failed to fetch tenant data", error);
+                notFound();
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        if (tenantId) {
+            fetchData();
+        }
+    }, [tenantId]);
+
+    if (isLoading) {
+        return <div>Loading...</div>;
+    }
 
     if (!tenant) {
-        notFound();
+        return notFound();
     }
-    
-    // For the prototype, we'll just show the main user list for any tenant.
-    // In a real app, you'd fetch users for the specific tenant.
-    const tenantUsers = userList;
 
     return (
         <>
@@ -89,7 +122,7 @@ export default function TenantDetailsPage() {
                             <Clock className="h-4 w-4 text-muted-foreground" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold">{tenant.lastActive}</div>
+                            <div className="text-2xl font-bold">{tenant.last_active}</div>
                             <p className="text-xs text-muted-foreground">last interaction recorded</p>
                         </CardContent>
                     </Card>

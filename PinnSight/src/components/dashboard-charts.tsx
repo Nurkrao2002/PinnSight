@@ -23,7 +23,9 @@ import {
   ChartLegendContent,
   type ChartConfig,
 } from "@/components/ui/chart";
-import { monthlyRevenueData, userAcquisitionData } from "@/lib/mock-data";
+
+const monthlyRevenueData: any[] = [];
+const userAcquisitionData: any[] = [];
 
 const revenueChartConfig = {
   revenue: {

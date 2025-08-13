@@ -6,9 +6,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Badge } from "../ui/badge";
-import { tenants } from "@/lib/mock-data";
 import { AlertTriangle, Info, XCircle, Shield, BarChart, Server, GanttChartSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useState, useEffect } from "react";
+import { Tenant } from "@/lib/types";
 import { StatCard } from "../stat-card";
 import {
   Dialog,
@@ -49,6 +50,24 @@ const systemAlerts = [
 
 
 export function SuperAdminDashboardView() {
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchTenants = async () => {
+      try {
+        const response = await fetch('/api/tenants');
+        const data = await response.json();
+        setTenants(data);
+      } catch (error) {
+        console.error("Failed to fetch tenants", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchTenants();
+  }, []);
+
   return (
     <>
       <DashboardHeader 
@@ -64,7 +83,7 @@ export function SuperAdminDashboardView() {
       </DashboardHeader>
       <main className="flex-1 p-4 sm:px-6 lg:px-8 space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <StatCard icon={GanttChartSquare} title="Active Companies" value="88" change="+5 this month" />
+            <StatCard icon={GanttChartSquare} title="Active Companies" value={tenants.length.toString()} change="+5 this month" />
             <StatCard icon={BarChart} title="Platform MRR" value="$125,430" change="+2.1%" />
             <StatCard icon={Server} title="System Uptime" value="99.98%" change="30 days" />
             <StatCard icon={Shield} title="API Latency" value="85ms" change="avg" />
@@ -87,8 +106,12 @@ export function SuperAdminDashboardView() {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {tenants.map(tenant => (
-                                <TableRow key={tenant.name}>
+                            {isLoading ? (
+                                <TableRow>
+                                    <TableCell colSpan={4} className="text-center h-24">Loading tenants...</TableCell>
+                                </TableRow>
+                            ) : tenants.map(tenant => (
+                                <TableRow key={tenant.id}>
                                     <TableCell className="font-medium">{tenant.name}</TableCell>
                                     <TableCell>{tenant.plan}</TableCell>
                                     <TableCell>

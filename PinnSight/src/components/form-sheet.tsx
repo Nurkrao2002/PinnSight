@@ -30,7 +30,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { roles } from "@/lib/mock-data";
+import { useState, useEffect } from "react";
+import { Role } from "@/lib/types";
 
 
 interface FormSheetProps<T extends z.ZodObject<any>> {
@@ -54,6 +55,23 @@ export function FormSheet<T extends z.ZodObject<any>>({
     title,
     description,
 }: FormSheetProps<T>) {
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchRoles = async () => {
+      try {
+        const response = await fetch('/api/roles');
+        const data = await response.json();
+        setRoles(data);
+      } catch (error) {
+        console.error("Failed to fetch roles", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchRoles();
+  }, []);
 
   const renderField = (name: string, field: any) => {
     const fieldSchema = schema.shape[name];
@@ -78,7 +96,7 @@ export function FormSheet<T extends z.ZodObject<any>>({
     }
 
     if (name === "role" && fieldSchema instanceof z.ZodString) {
-        const roleNames = Object.keys(roles);
+        const roleNames = roles.map(r => r.name);
          return (
             <Select onValueChange={field.onChange} defaultValue={field.value}>
                 <FormControl>
@@ -87,7 +105,8 @@ export function FormSheet<T extends z.ZodObject<any>>({
                     </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                    {roleNames.map((role: string) => (
+                    {isLoading ? <SelectItem value="loading" disabled>Loading...</SelectItem> :
+                    roleNames.map((role: string) => (
                         <SelectItem key={role} value={role}>
                             {role}
                         </SelectItem>

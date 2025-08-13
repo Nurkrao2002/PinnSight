@@ -13,9 +13,9 @@ import { StatCard } from "../stat-card";
 import { UserPlus, Users, MessageSquareWarning, Clock, BarChart2, LineChart as LineChartIcon, Database, ExternalLink, AlertTriangle, CheckCircle, Info } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
-import { tenants, supportTickets, userList } from "@/lib/mock-data";
 import { Badge } from "../ui/badge";
 import { PeriodPicker } from "../period-picker";
+import { Tenant, SupportTicket, User } from "@/lib/types";
 import { BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Bar } from "recharts";
 import { InfoTooltip } from "../info-tooltip";
 
@@ -44,38 +44,43 @@ const alerts = [
     },
 ];
 
-const newSignupsData = [
-    { date: "Jan", signups: 5 }, { date: "Feb", signups: 8 }, { date: "Mar", signups: 12 },
-    { date: "Apr", signups: 10 }, { date: "May", signups: 15 }, { date: "Jun", signups: 18 },
-];
+const newSignupsData: any[] = [];
+const supportTicketsData: any[] = [];
+const topTenantsByStorage: any[] = [];
+const apiCallsData: any[] = [];
 
-const supportTicketsData = [
-    { priority: "Low", open: 10, resolved: 30 },
-    { priority: "Medium", open: 8, resolved: 25 },
-    { priority: "High", open: 5, resolved: 15 },
-];
-
-const topTenantsByStorage = [
-    { name: "Srisys Inc.", storage: 450, fill: "hsl(var(--chart-1))" },
-    { name: "Innovate Inc.", storage: 320, fill: "hsl(var(--chart-2))" },
-    { name: "QuantumLeap", storage: 280, fill: "hsl(var(--chart-3))" },
-    { name: "Pigeon-Tech", storage: 150, fill: "hsl(var(--chart-4))" },
-    { name: "Synergy Labs", storage: 80, fill: "hsl(var(--chart-5))" },
-];
-
-const apiCallsData = newSignupsData.map((d, i) => ({ 
-    ...d, 
-    calls: (d.signups * 1000 * (Math.random() + 0.5) * (i+1) * 5)
-}));
-
-
-const recentSignups = tenants.slice(0, 3);
-const activeUsers = userList.slice(0, 5);
-const openTickets = supportTickets.filter(t => t.status === 'Open').slice(0, 5);
 
 export function PlatformManagerDashboardView() {
   const [period, setPeriod] = useState<Period>('M');
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+  const [recentSignups, setRecentSignups] = useState<Tenant[]>([]);
+  const [activeUsers, setActiveUsers] = useState<User[]>([]);
+  const [openTickets, setOpenTickets] = useState<SupportTicket[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [tenantsResponse, ticketsResponse, usersResponse] = await Promise.all([
+          fetch('/api/tenants'),
+          fetch('/api/support-tickets'),
+          fetch('/api/users'),
+        ]);
+        const tenants = await tenantsResponse.json();
+        const tickets = await ticketsResponse.json();
+        const users = await usersResponse.json();
+
+        setRecentSignups(tenants.slice(0, 3));
+        setActiveUsers(users.slice(0, 5));
+        setOpenTickets(tickets.filter((t: SupportTicket) => t.status === 'Open').slice(0, 5));
+      } catch (error) {
+        console.error("Failed to fetch dashboard data", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
 
   const handlePeriodChange = useCallback((newPeriod: Period) => {
     setPeriod(newPeriod);
