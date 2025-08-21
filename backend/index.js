@@ -1,6 +1,9 @@
 const express = require('express');
 const cors = require('cors');
 const db = require('./db');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const { authenticateToken, authorizeRoles } = require('./auth');
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -15,7 +18,7 @@ app.get('/', (req, res) => {
 });
 
 // API Endpoints
-app.get('/api/sales', async (req, res) => {
+app.get('/api/sales', authenticateToken, authorizeRoles('CEO/Executive', 'Finance Team'), async (req, res) => {
   try {
     const { rows } = await db.query('SELECT month, sales_amount AS sales FROM sales_monthly WHERE company_id = 1 ORDER BY month');
     // Simple mapping from month number to month name
@@ -31,7 +34,7 @@ app.get('/api/sales', async (req, res) => {
   }
 });
 
-app.get('/api/activity', async (req, res) => {
+app.get('/api/activity', authenticateToken, async (req, res) => {
   try {
     const { rows } = await db.query(`
       SELECT t.id, u.name as user, t.amount, t.transaction_date as date, t.status
@@ -47,10 +50,11 @@ app.get('/api/activity', async (req, res) => {
   }
 });
 
-app.get('/api/user', async (req, res) => {
+app.get('/api/user', authenticateToken, async (req, res) => {
     try {
-        // Hardcoding user ID 1 for now
-        const { rows } = await db.query('SELECT name, avatar FROM users WHERE id = 1');
+        // Using the user ID from the token
+        const userId = req.user.userId;
+        const { rows } = await db.query('SELECT name, avatar FROM users WHERE id = $1', [userId]);
         if (rows.length === 0) {
             return res.status(404).json({ error: 'User not found' });
         }
@@ -61,7 +65,7 @@ app.get('/api/user', async (req, res) => {
     }
 });
 
-app.get('/api/stats', async (req, res) => {
+app.get('/api/stats', authenticateToken, async (req, res) => {
     // For now, returning hardcoded data similar to the mock.
     // A real implementation would calculate these from the database.
     const statCardData = [
@@ -71,6 +75,54 @@ app.get('/api/stats', async (req, res) => {
       { title: "Open Tickets", value: "1", iconName: "TicketDetailedFill" },
     ];
     res.json(statCardData);
+});
+
+
+// Authentication Endpoint
+app.post('/api/login', async (req, res) => {
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required' });
+  }
+
+  try {
+    const { rows } = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+
+    if (rows.length === 0) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const user = rows[0];
+
+    const passwordMatch = await bcrypt.compare(password, user.password);
+
+    if (!passwordMatch) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const token = jwt.sign(
+      { userId: user.id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+
+    res.json({
+      message: 'Login successful',
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        avatar: user.avatar,
+      }
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 
